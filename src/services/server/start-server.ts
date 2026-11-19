@@ -1,27 +1,26 @@
-/**
- * Start Server
- * Initializes and starts the Express server
- */
+import type { Express } from 'express';
 
-import { Express } from 'express';
-
-interface ServerConfig {
+type ServerConfig = {
   port: number;
   environment: string;
-}
+  host?: string;
+};
 
+/**
+ * Starts the Express HTTP listener.
+ */
 export const startServer = (app: Express, config: ServerConfig): void => {
-  const { port, environment } = config;
+  const { port, environment, host = '0.0.0.0' } = config;
 
-  app.listen(port, () => {
+  app.listen(port, host, () => {
     console.log('');
     console.log('='.repeat(50));
-    console.log(`🚀 TroutHouseTech Express Server`);
+    console.log('🚀 Storage Express');
     console.log('='.repeat(50));
     console.log(`Environment: ${environment}`);
-    console.log(`Port: ${port}`);
-    console.log(`URL: http://localhost:${port}`);
-    console.log(`Health Check: http://localhost:${port}/api/health`);
+    console.log(`Listening: http://${host}:${port}`);
+    console.log(`Health: http://${host}:${port}/api/health`);
+    console.log(`Storage: http://${host}:${port}/api/storage/health`);
     console.log('='.repeat(50));
     console.log('');
   });

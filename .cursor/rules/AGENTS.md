@@ -48,7 +48,7 @@ BEFORE implementing ANY feature, you MUST:
 
 ## Managed clients & edge
 
-- MUST use `getManagedSupabaseClient()` / `getManagedAnthropicClient()` / `getManagedStripeClient()` when added; NEVER `createClient()` or `new Stripe()` in handlers, services, or data code.
+- MUST get the Postgres pool from `getManagedPgPool()` (via `requirePgPool(res)` in handlers) and pass it into `processX()` and data functions; NEVER `new Pool()` outside `src/services/postgres/`. Other managed clients (`getManagedAnthropicClient()`, …) follow the same rule.
 - MUST initialize managed clients once at startup; null-check before use → `500`.
 - Supabase edge functions MUST ONLY call Railway endpoints.
 

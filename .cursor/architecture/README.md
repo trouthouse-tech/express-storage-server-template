@@ -1,6 +1,6 @@
 # Architecture Documentation
 
-ADRs for **express-server-template** and apps created from it.
+ADRs for **express-storage-server-template** (storage-express) and apps created from it.
 
 ## ADR index
 
@@ -14,6 +14,8 @@ ADRs for **express-server-template** and apps created from it.
 8. [008 – Domain models (`src/model`)](./008-domain-models.md) — table row + write-input types in `src/model/{entity}/`; never `src/data/{table}/types.ts`.
 9. [009 – Stripe Checkout one-time payment](./009-stripe-checkout-one-time-payment.md) — hosted `mode: "payment"`, webhook + complete, grant once when paid.
 10. [010 – No SQL functions](./010-no-sql-functions.md) — tables, indexes, grants, RLS only; `updated_at` in CRUD.
+11. [011 – Storage data plane](./011-storage-api-split.md) — storage owns Postgres; invoke whitelist from `src/data` barrels; adding a table.
+12. [012 – Dispatcher exposed endpoints](./012-dispatcher-exposed-endpoints.md) — gateway path catalog rows per project.
 
 ## How to use
 

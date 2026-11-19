@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-**express-server-template** ships with cross-cutting code under `src/services/` only. There is no database and no `src/data/` yet. This ADR documents the starter tree and how to add table-backed features **without** introducing `src/domains/`.
+**express-storage-server-template** ships the storage data plane: a managed Postgres pool, migrations, the invoke/meta/seed routes and one table (`dispatcher_exposed_endpoints`). See [011](./011-storage-api-split.md) for adding tables. This ADR documents the starter tree and how to add table-backed features **without** introducing `src/domains/`.
 
 ## Decision
 
@@ -14,10 +14,20 @@ Accepted
 
 ```text
 index.ts
+migrations/
+scripts/apply-migrations.ts
+src/model/dispatcher-exposed-endpoint/
+src/data/dispatcher-exposed-endpoints/
 src/services/
   middleware/
   health/
   server/
+  postgres/
+  managed/
+  storage/
+src/utils/
+  http/
+  postgres/
 ```
 
 - Factory routers (`createHealthRouter(): Router`).
