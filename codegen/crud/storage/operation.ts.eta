@@ -1,0 +1,128 @@
+<%
+/* src/data/{folder}/{operation}.ts: pool first, parameterized SQL, RETURNING *, null/false when nothing matched. */
+const n = it.names;
+const t = n.table;
+const op = it.op;
+const crud = it.crud;
+const E = n.Entity;
+const dates = crud.columns.filter((column) => column.sql_type === 'DATE').map((column) => column.name);
+const jsons = crud.columns.filter((column) => column.sql_type === 'JSONB' || column.sql_type === 'JSON').map((column) => column.name);
+const mapper = `map${E}Row`;
+const mapExpr = (value, many) => (dates.length === 0 ? value : many ? `${value}.map(${mapper})` : `${mapper}(${value})`);
+const imports = (types) => {
+  const lines = ["import type { Pool } from 'pg';"];
+  if (types.length > 0) lines.push(`import type { ${types.join(', ')} } from '../../model/${n.entity}';`);
+  if (dates.length > 0) lines.push(`import { ${mapper} } from './map-${n.entity}-row';`);
+  return lines.join('\n');
+};
+const where = (condition) => {
+  const parts = [condition, crud.readFilter].filter(Boolean);
+  return parts.length > 0 ? ` WHERE ${parts.join(' AND ')}` : '';
+};
+const columnsConst = [
+  `const COLUMNS = [${crud.columns.map((column) => `'${column.name}'`).join(', ')}] as const;`,
+  ...(jsons.length > 0 ? [`const JSON_COLUMNS: readonly string[] = [${jsons.map((name) => `'${name}'`).join(', ')}];`] : []),
+].join('\n');
+const toParam =
+  jsons.length > 0
+    ? '(column: string, value: unknown) => (JSON_COLUMNS.includes(column) && value !== null ? JSON.stringify(value) : value)'
+    : '(_column: string, value: unknown) => value';
+-%>
+<% if (op.kind === 'list') { -%>
+<%= imports([E]) %>
+
+/**
+ * Lists <%= t %> (<%= crud.orderBy %>).
+ */
+export const <%= op.name %> = async (pool: Pool): Promise<<%= E %>[]> => {
+  const result = await pool.query<<%= E %>>(<%= it.h.json(`SELECT * FROM ${t}${where('')} ORDER BY ${crud.orderBy}`) %>);
+  return <%= mapExpr('result.rows', true) %>;
+};
+<% } else if (op.kind === 'list_by') { -%>
+<%= imports([E]) %>
+
+/**
+ * Lists <%= t %> for one <%= op.column %>.
+ */
+export const <%= op.name %> = async (pool: Pool, <%= op.column %>: string): Promise<<%= E %>[]> => {
+  const result = await pool.query<<%= E %>>(
+    <%= it.h.json(`SELECT * FROM ${t}${where(`${op.column} = $1`)} ORDER BY ${crud.orderBy}`) %>,
+    [<%= op.column %>],
+  );
+  return <%= mapExpr('result.rows', true) %>;
+};
+<% } else if (op.kind === 'get_by_id') { -%>
+<%= imports([E]) %>
+
+/**
+ * Returns one <%= n.entity %> or null.
+ */
+export const <%= op.name %> = async (pool: Pool, id: string): Promise<<%= E %> | null> => {
+  const result = await pool.query<<%= E %>>('SELECT * FROM <%= t %> WHERE id = $1', [id]);
+  const row = result.rows[0];
+  return row ? <%= mapExpr('row', false) %> : null;
+};
+<% } else if (op.kind === 'create') { -%>
+<%= imports([`Create${E}Input`, E]) %>
+
+<%= columnsConst %>
+const toParam = <%= toParam %>;
+
+/**
+ * Inserts a <%= n.entity %>; omitted fields use their column defaults.
+ */
+export const <%= op.name %> = async (pool: Pool, input: Create<%= E %>Input): Promise<<%= E %>> => {
+  const values = input as Record<string, unknown>;
+  const provided = COLUMNS.filter((column) => values[column] !== undefined);
+  const sql =
+    provided.length > 0
+      ? `INSERT INTO <%= t %> (${provided.join(', ')}) VALUES (${provided.map((_, index) => `$${index + 1}`).join(', ')}) RETURNING *`
+      : <%= it.h.json(`INSERT INTO ${t} DEFAULT VALUES RETURNING *`) %>;
+  const result = await pool.query<<%= E %>>(sql, provided.map((column) => toParam(column, values[column])));
+  const row = result.rows[0];
+  if (!row) throw new Error('Insert returned no row');
+  return <%= mapExpr('row', false) %>;
+};
+<% } else if (op.kind === 'update') { -%>
+<%= imports([E, `Update${E}Input`]) %>
+
+<%= columnsConst %>
+const toParam = <%= toParam %>;
+
+/**
+ * Updates a <%= n.entity %> (only the given fields) and sets updated_at; null when not found.
+ */
+export const <%= op.name %> = async (
+  pool: Pool,
+  id: string,
+  input: Update<%= E %>Input,
+): Promise<<%= E %> | null> => {
+  const values = input as Record<string, unknown>;
+  const provided = COLUMNS.filter((column) => values[column] !== undefined);
+  const sets = ['updated_at = now()', ...provided.map((column, index) => `${column} = $${index + 2}`)];
+  const result = await pool.query<<%= E %>>(
+    `UPDATE <%= t %> SET ${sets.join(', ')} WHERE id = $1 RETURNING *`,
+    [id, ...provided.map((column) => toParam(column, values[column]))],
+  );
+  const row = result.rows[0];
+  return row ? <%= mapExpr('row', false) %> : null;
+};
+<% } else if (op.kind === 'delete') { -%>
+import type { Pool } from 'pg';
+
+/**
+<% if (crud.softDelete) { -%>
+ * Soft-deletes a <%= n.entity %> (sets deleted_at); false when not found or already deleted.
+<% } else { -%>
+ * Deletes a <%= n.entity %>; false when not found.
+<% } -%>
+ */
+export const <%= op.name %> = async (pool: Pool, id: string): Promise<boolean> => {
+<% if (crud.softDelete) { -%>
+  const result = await pool.query('UPDATE <%= t %> SET deleted_at = now(), updated_at = now() WHERE id = $1 AND deleted_at IS NULL', [id]);
+<% } else { -%>
+  const result = await pool.query('DELETE FROM <%= t %> WHERE id = $1', [id]);
+<% } -%>
+  return (result.rowCount ?? 0) > 0;
+};
+<% } -%>

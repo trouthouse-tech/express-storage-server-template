@@ -1,0 +1,25 @@
+<%
+/* Row mapper for tables with DATE columns (pg returns Date; the model says YYYY-MM-DD). Empty output = no file. */
+const E = it.names.Entity;
+const dates = it.columns.filter((column) => column.sql_type === 'DATE').map((column) => column.name);
+-%>
+<% if (dates.length > 0) { -%>
+import type { <%= E %> } from '../../model/<%= it.names.entity %>';
+
+const toDateString = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null;
+  if (!(value instanceof Date)) return String(value).slice(0, 10);
+  const pad = (part: number): string => String(part).padStart(2, '0');
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+};
+
+/**
+ * Maps a <%= it.names.table %> row to the model (DATE columns as YYYY-MM-DD). Not exported from the barrel.
+ */
+export const map<%= E %>Row = (row: <%= E %>): <%= E %> => ({
+  ...row,
+<% for (const name of dates) { -%>
+  <%= name %>: toDateString(row.<%= name %>) as <%= E %>['<%= name %>'],
+<% } -%>
+});
+<% } -%>

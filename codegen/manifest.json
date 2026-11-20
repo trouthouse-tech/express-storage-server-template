@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "role": "storage",
+  "kinds": {
+    "model": {
+      "files": [
+        {
+          "id": "migration",
+          "path": "migrations/<%= String(it.migrations.next + it.index).padStart(3, '0') %>_create_<%= it.table.name %>.sql",
+          "each": "table",
+          "mode": "write",
+          "template": "model/migration.sql.eta",
+          "convention_keys": ["data_model.migrations"]
+        },
+        {
+          "id": "model",
+          "path": "src/model/<%= it.table.entity %>/index.ts",
+          "each": "table",
+          "mode": "write",
+          "template": "model/model.ts.eta",
+          "convention_keys": ["data_model.model_types"]
+        },
+        {
+          "id": "model-barrel",
+          "path": "src/model/index.ts",
+          "each": "once",
+          "mode": "merge",
+          "merge": {
+            "on_missing_file": "empty",
+            "scope": "tables",
+            "present": { "regex": "from\\s+['\"]\\./<%= it.h.reEscape(it.table.entity) %>(?:/index)?['\"]" },
+            "steps": [{ "op": "append_lines", "line": "export type * from './<%= it.table.entity %>';" }]
+          }
+        },
+        {
+          "id": "seed-table-names",
+          "path": "src/services/storage/seed-table-names.ts",
+          "each": "once",
+          "mode": "merge",
+          "merge": {
+            "on_missing_file": "skip",
+            "scope": "tables",
+            "present": { "in_list": true },
+            "steps": [
+              {
+                "op": "rewrite_list",
+                "pattern": "(SEED_TABLE_NAMES\\s*=\\s*\\[)([\\s\\S]*?)(\\]\\s*as\\s+const)",
+                "item": "<%= it.table.name %>",
+                "format": "lines",
+                "line": "  '<%= it.item %>',"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "crud": {
+      "files": [
+        {
+          "id": "data-operation",
+          "path": "src/data/<%= it.names.folder %>/<%= it.op.file %>.ts",
+          "each": "operation",
+          "mode": "write",
+          "template": "crud/storage/operation.ts.eta",
+          "convention_keys": ["data_model.data_layer"]
+        },
+        {
+          "id": "data-row-mapper",
+          "path": "src/data/<%= it.names.folder %>/map-<%= it.names.entity %>-row.ts",
+          "each": "table",
+          "mode": "write",
+          "template": "crud/storage/map-row.ts.eta",
+          "skip_if_empty": true
+        },
+        {
+          "id": "data-barrel",
+          "path": "src/data/<%= it.names.folder %>/index.ts",
+          "each": "table",
+          "mode": "write",
+          "template": "crud/barrel.ts.eta"
+        },
+        {
+          "id": "operation-registry",
+          "path": "src/services/storage/build-storage-operation-registry.ts",
+          "each": "once",
+          "mode": "merge",
+          "merge": {
+            "on_missing_file": "error",
+            "missing_file_error": "build-storage-operation-registry.ts not found (is this repo from the storage template?)",
+            "scope": "tables",
+            "present": { "in_list": true },
+            "steps": [
+              {
+                "op": "rewrite_list",
+                "pattern": "(const modules\\s*:\\s*Record<string,\\s*unknown>\\[\\]\\s*=\\s*\\[)([\\s\\S]*?)(\\];)",
+                "item": "<%= it.names.thingsCamel %>",
+                "format": "inline",
+                "error": "build-storage-operation-registry.ts has no `const modules: Record<string, unknown>[] = [...]` list"
+              },
+              { "op": "add_imports", "line": "import * as <%= it.names.thingsCamel %> from '../../data/<%= it.names.folder %>';" }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
