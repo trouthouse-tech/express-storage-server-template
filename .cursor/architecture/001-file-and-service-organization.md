@@ -38,9 +38,14 @@ src/
     users/
       router.ts
       routes/
-        get-user-handler.ts
-      process-get-user.ts
+        get-user-handler.ts      # plain CRUD: calls src/data/users directly
       types.ts
+      index.ts
+    orders/
+      router.ts
+      routes/
+        post-create-order-handler.ts
+      process-create-order.ts    # only because create has real business logic
       index.ts
   utils/
     users/
@@ -59,11 +64,12 @@ src/
   services/
     users/
       get-user-handler.ts        # ❌ handler with inline .from('users') query
+      process-get-user.ts        # ❌ pass-through that only forwards to getUserById
   routes/
     users.ts                     # ❌ global routes folder with mixed concerns
 ```
 
-**Reasoning:** `src/data/{table}/` owns every Supabase/table call. `src/services/{feature}/` owns routers, handlers, and `processX()` orchestration that **calls** data functions.
+**Reasoning:** `src/data/{table}/` owns every Supabase/table call. `src/services/{feature}/` owns routers, handlers, and, only when there is real business logic, `processX()` orchestration that **calls** data functions.
 
 ---
 
@@ -119,29 +125,31 @@ Feature folders hold everything that is **not** raw CRUD:
 |---------------|---------|
 | `router.ts` | `createXRouter(): Router` — route wiring only |
 | `routes/` | One handler per file |
-| `process-*.ts` | Action/business logic; may call `src/data/` and `src/utils/` |
+| `process-*.ts` | Only when an operation has logic beyond plain CRUD (multi-step writes, cross-table rules, derived values, external or AI calls). Takes the client first; calls `src/data/` and `src/utils/` |
 | `types.ts` | Request/response and feature types (`type`, not `interface`) |
 | `config.ts` | Optional feature config |
+
+Never create pass-through process functions that just forward to a data wrapper. Plain CRUD handlers call the `src/data/` wrapper directly. Add a process function later, when logic actually appears.
 
 ✅ Correct:
 
 ```typescript
-// src/services/users/process-get-user.ts
+// src/services/orders/process-create-order.ts
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getUserById } from '../../data/users/get-user-by-id';
+import { insertOrder } from '../../data/orders/insert-order';
+import { insertOrderItems } from '../../data/order-items/insert-order-items';
 
 /**
- * Loads a user for GET /users/:id.
+ * Creates an order with its items and a derived total (multi-step write).
  */
-export const processGetUser = async (
+export const processCreateOrder = async (
   supabase: SupabaseClient,
-  userId: string,
+  input: { customerId: string; items: OrderItem[] },
 ) => {
-  const user = await getUserById(supabase, userId);
-  if (!user) {
-    throw new Error('User not found');
-  }
-  return user;
+  const total = input.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const order = await insertOrder(supabase, { customer_id: input.customerId, total });
+  await insertOrderItems(supabase, order.id, input.items);
+  return order;
 };
 ```
 
@@ -154,6 +162,10 @@ export const processGetUser = async (supabase, userId: string) => {
   const { data } = await supabase.from('users').select('*').eq('id', userId).single();
   return data;
 };
+
+// src/services/users/process-get-user.ts
+// ❌ pass-through — the handler should call getUserById directly
+export const processGetUser = async (supabase, userId: string) => getUserById(supabase, userId);
 ```
 
 ---
@@ -161,7 +173,7 @@ export const processGetUser = async (supabase, userId: string) => {
 ### Handlers and routers
 
 - Handlers live in `src/services/{feature}/routes/`.
-- Handlers delegate to `processX()` in the same service folder.
+- Plain CRUD handlers call the `src/data/` wrapper directly. They call `processX()` only when one exists for real business logic.
 - Routers stay thin; see [002 – Router factory & handler pattern](./002-router-factory-and-handler-pattern.md).
 
 ---

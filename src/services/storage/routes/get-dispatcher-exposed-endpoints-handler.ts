@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { requirePgPool } from '../../../utils/http';
-import { processListDispatcherExposedEndpoints } from '../process-list-dispatcher-exposed-endpoints';
+import { listDispatcherExposedEndpointsByProject } from '../../../data/dispatcher-exposed-endpoints/list-dispatcher-exposed-endpoints-by-project';
+import { listEnabledDispatcherExposedEndpointsByProject } from '../../../data/dispatcher-exposed-endpoints/list-enabled-dispatcher-exposed-endpoints-by-project';
 
 const ROUTE = 'GET /api/storage/dispatcher-exposed-endpoints';
 
@@ -34,7 +35,9 @@ export const getDispatcherExposedEndpointsHandler = async (
   const enabledOnly = parseEnabledOnly(req.query.enabledOnly);
 
   try {
-    const endpoints = await processListDispatcherExposedEndpoints(pool, projectId, enabledOnly);
+    const endpoints = enabledOnly
+      ? await listEnabledDispatcherExposedEndpointsByProject(pool, projectId)
+      : await listDispatcherExposedEndpointsByProject(pool, projectId);
     console.log(`📤 ${ROUTE} status=200 count=${endpoints.length}`);
     res.status(200).json({ success: true, data: { endpoints } });
   } catch (error) {

@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import type { InsertDispatcherExposedEndpointInput } from '../../../model/dispatcher-exposed-endpoint';
 import { requirePgPool } from '../../../utils/http';
-import { processCreateDispatcherExposedEndpoint } from '../process-create-dispatcher-exposed-endpoint';
+import { insertDispatcherExposedEndpoint } from '../../../data/dispatcher-exposed-endpoints/insert-dispatcher-exposed-endpoint';
 
 const ROUTE = 'POST /api/storage/dispatcher-exposed-endpoints';
 
@@ -26,7 +26,7 @@ export const postDispatcherExposedEndpointHandler = async (
   }
 
   try {
-    const endpoint = await processCreateDispatcherExposedEndpoint(pool, {
+    const endpoint = await insertDispatcherExposedEndpoint(pool, {
       id: body.id.trim(),
       projectId: body.projectId.trim(),
       serviceId: body.serviceId.trim(),

@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import type { UpdateDispatcherExposedEndpointInput } from '../../../model/dispatcher-exposed-endpoint';
 import { requirePgPool } from '../../../utils/http';
-import { processUpdateDispatcherExposedEndpoint } from '../process-update-dispatcher-exposed-endpoint';
+import { updateDispatcherExposedEndpoint } from '../../../data/dispatcher-exposed-endpoints/update-dispatcher-exposed-endpoint';
 
 const ROUTE = 'PATCH /api/storage/dispatcher-exposed-endpoints/:id';
 
@@ -28,7 +28,7 @@ export const patchDispatcherExposedEndpointHandler = async (
   const body = req.body as UpdateDispatcherExposedEndpointInput;
 
   try {
-    const endpoint = await processUpdateDispatcherExposedEndpoint(pool, id, body);
+    const endpoint = await updateDispatcherExposedEndpoint(pool, id, body);
     if (!endpoint) {
       res.status(404).json({ success: false, error: 'Endpoint not found' });
       return;

@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { requirePgPool } from '../../../utils/http';
-import { processDeleteDispatcherExposedEndpoint } from '../process-delete-dispatcher-exposed-endpoint';
+import { deleteDispatcherExposedEndpoint } from '../../../data/dispatcher-exposed-endpoints/delete-dispatcher-exposed-endpoint';
 
 const ROUTE = 'DELETE /api/storage/dispatcher-exposed-endpoints/:id';
 
@@ -25,7 +25,7 @@ export const deleteDispatcherExposedEndpointHandler = async (
   }
 
   try {
-    const deleted = await processDeleteDispatcherExposedEndpoint(pool, id);
+    const deleted = await deleteDispatcherExposedEndpoint(pool, id);
     if (!deleted) {
       res.status(404).json({ success: false, error: 'Endpoint not found' });
       return;

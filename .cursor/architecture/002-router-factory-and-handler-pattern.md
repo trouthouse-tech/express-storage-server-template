@@ -17,13 +17,14 @@ Applies to all API features under `src/services/{feature}/`. **Do not use `src/d
 1. Use router factory functions only: `createXRouter(): Router`.
 2. Routers are thin: route wiring only (no business logic, no try/catch, no DB calls).
 3. Put handlers in `src/services/{feature}/routes/` with one handler per file.
-4. Put action/business logic in `processX()` files in the same `src/services/{feature}/` folder.
-5. Handler flow is fixed:
-   1) get managed client  
-   2) validate request  
-   3) call `processX()`  
-   4) catch/log errors  
-   5) return response
+4. Create `processX()` in `src/services/{feature}/process-*.ts` **only** when an operation has logic beyond plain CRUD: multi-step writes, cross-table rules, derived values, external or AI calls. It takes the client first and calls `src/data` wrappers only. Never write pass-through process functions that just forward to a data wrapper. Add a process function later, when logic actually appears.
+5. Every handler follows a fixed flow:
+   1) Log `📥`.  
+   2) Get the managed client; if it is null, answer `500`.  
+   3) Validate params, query and body; if any is bad, answer `400`.  
+   4) Call the work function. For plain CRUD, that is the `src/data` wrapper (e.g. `listContextAreas(client)`). Use `processX()` only when one exists for real business logic.  
+   5) Respond `200` with data, or `404` when get, update or delete finds no row.  
+   One try/catch around the whole body logs `❌` and answers `500`.
 6. Use managed clients only (`getManagedSupabaseClient()`, `getManagedAnthropicClient()`).
 7. Always null-check managed clients before use and return `500` when unavailable.
 8. Database CRUD lives in `src/data/{table}/` only; never inline queries in handlers or `processX()`.
@@ -42,10 +43,9 @@ src/
       router.ts
       types.ts
       routes/
-        post-create-order-handler.ts
-        get-order-by-id-handler.ts
+        post-create-order-handler.ts   # calls processCreateOrder (real logic)
+        get-order-by-id-handler.ts     # plain CRUD: calls selectOrderById directly
       process-create-order.ts
-      process-get-order-by-id.ts
   data/
     orders/                    # one folder per table
       insert-order.ts
@@ -81,7 +81,51 @@ export const createOrdersRouter = (): Router => {
 
 ---
 
-## ✅ Handler example
+## ✅ Plain CRUD handler (calls the data wrapper)
+
+```ts
+import { Request, Response } from 'express';
+import { getManagedSupabaseClient } from '../managed/clients';
+import { selectOrderById } from '../../../data/orders/select-order-by-id';
+
+/**
+ * Handles GET /orders/:orderId.
+ */
+export const getOrderByIdHandler = async (
+  req: Request,
+  res: Response,
+): Promise<Response> => {
+  console.log('📥 GET /orders/:orderId');
+
+  try {
+    const supabase = getManagedSupabaseClient();
+    if (!supabase) {
+      console.error('❌ Supabase client is not initialized');
+      return res.status(500).json({ success: false, error: 'Service unavailable' });
+    }
+
+    const orderId = req.params.orderId?.trim();
+    if (!orderId) {
+      return res.status(400).json({ success: false, error: 'orderId required' });
+    }
+
+    const order = await selectOrderById(supabase, orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+    console.log('📤 200 GET /orders/:orderId');
+    return res.status(200).json({ success: true, data: order });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('❌ Failed to get order:', message);
+    return res.status(500).json({ success: false, error: message });
+  }
+};
+```
+
+---
+
+## ✅ Handler with business logic (calls `processX()`)
 
 ```ts
 import { Request, Response } from 'express';
@@ -98,20 +142,19 @@ export const postCreateOrderHandler = async (
 ): Promise<Response> => {
   console.log('📥 POST /orders');
 
-  const supabase = getManagedSupabaseClient();
-  if (!supabase) {
-    console.error('❌ Supabase client is not initialized');
-    return res.status(500).json({ success: false, error: 'Service unavailable' });
-  }
-
-  const body = req.body as Partial<CreateOrderRequest>;
-  if (!body.customerId || !Array.isArray(body.items) || body.items.length === 0) {
-    return res.status(400).json({ success: false, error: 'Invalid request body' });
-  }
-
   try {
-    const result = await processCreateOrder({
-      supabase,
+    const supabase = getManagedSupabaseClient();
+    if (!supabase) {
+      console.error('❌ Supabase client is not initialized');
+      return res.status(500).json({ success: false, error: 'Service unavailable' });
+    }
+
+    const body = req.body as Partial<CreateOrderRequest>;
+    if (!body.customerId || !Array.isArray(body.items) || body.items.length === 0) {
+      return res.status(400).json({ success: false, error: 'Invalid request body' });
+    }
+
+    const result = await processCreateOrder(supabase, {
       customerId: body.customerId,
       items: body.items,
     });
@@ -129,25 +172,34 @@ export const postCreateOrderHandler = async (
 
 ## `processX` and data layer
 
-- `processX()` orchestrates rules and calls `src/data/{table}/` functions.
+- `processX()` exists only for real business logic and calls `src/data/{table}/` functions.
 - `processX()` must not contain raw `.from('table')` calls.
+
+✅ Correct (multi-step write + derived value):
 
 ```ts
 import { insertOrder } from '../../data/orders/insert-order';
+import { insertOrderItems } from '../../data/order-items/insert-order-items';
 
 /**
- * Creates an order and returns the created record.
+ * Creates an order with its items and a computed total.
  */
-export const processCreateOrder = async (input: {
-  supabase: SupabaseClient;
-  customerId: string;
-  items: OrderItem[];
-}) => {
-  return insertOrder(input.supabase, {
-    customer_id: input.customerId,
-    items: input.items,
-  });
+export const processCreateOrder = async (
+  supabase: SupabaseClient,
+  input: { customerId: string; items: OrderItem[] },
+) => {
+  const total = input.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const order = await insertOrder(supabase, { customer_id: input.customerId, total });
+  await insertOrderItems(supabase, order.id, input.items);
+  return order;
 };
+```
+
+❌ Incorrect (pass-through; the handler should call `selectOrderById` directly):
+
+```ts
+export const processGetOrderById = async (supabase: SupabaseClient, orderId: string) =>
+  selectOrderById(supabase, orderId);
 ```
 
 Data functions accept `SupabaseClient` first, live under `src/data/orders/`, one per file, with `💾` logging.
@@ -157,7 +209,9 @@ Data functions accept `SupabaseClient` first, live under `src/data/orders/`, one
 ## Definition of done
 
 - [ ] Router exports `createXRouter(): Router` under `src/services/{feature}/`
-- [ ] Handlers in `routes/`, one per file, delegate to `processX()`
+- [ ] Handlers in `routes/`, one per file. Plain CRUD handlers call the `src/data` wrapper; handlers call `processX()` only when it holds real business logic
+- [ ] No pass-through process functions
+- [ ] Get, update and delete handlers answer `404` when no row is found
 - [ ] CRUD only in `src/data/{table}/`, one function per file
 - [ ] No `src/domains/` paths
 - [ ] JSDoc on router, handlers, `processX`, and data functions
