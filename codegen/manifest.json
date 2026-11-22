@@ -10,7 +10,9 @@
           "each": "table",
           "mode": "write",
           "template": "model/migration.sql.eta",
-          "convention_keys": ["data_model.migrations"]
+          "convention_keys": [
+            "data_model.migrations"
+          ]
         },
         {
           "id": "model",
@@ -18,7 +20,9 @@
           "each": "table",
           "mode": "write",
           "template": "model/model.ts.eta",
-          "convention_keys": ["data_model.model_types"]
+          "convention_keys": [
+            "data_model.model_types"
+          ]
         },
         {
           "id": "model-barrel",
@@ -28,8 +32,15 @@
           "merge": {
             "on_missing_file": "empty",
             "scope": "tables",
-            "present": { "regex": "from\\s+['\"]\\./<%= it.h.reEscape(it.table.entity) %>(?:/index)?['\"]" },
-            "steps": [{ "op": "append_lines", "line": "export type * from './<%= it.table.entity %>';" }]
+            "present": {
+              "regex": "from\\s+['\"]\\./<%= it.h.reEscape(it.table.entity) %>(?:/index)?['\"]"
+            },
+            "steps": [
+              {
+                "op": "append_lines",
+                "line": "export type * from './<%= it.table.entity %>';"
+              }
+            ]
           }
         },
         {
@@ -40,7 +51,9 @@
           "merge": {
             "on_missing_file": "skip",
             "scope": "tables",
-            "present": { "in_list": true },
+            "present": {
+              "in_list": true
+            },
             "steps": [
               {
                 "op": "rewrite_list",
@@ -62,7 +75,9 @@
           "each": "operation",
           "mode": "write",
           "template": "crud/storage/operation.ts.eta",
-          "convention_keys": ["data_model.data_layer"]
+          "convention_keys": [
+            "data_model.data_layer"
+          ]
         },
         {
           "id": "data-row-mapper",
@@ -88,7 +103,9 @@
             "on_missing_file": "error",
             "missing_file_error": "build-storage-operation-registry.ts not found (is this repo from the storage template?)",
             "scope": "tables",
-            "present": { "in_list": true },
+            "present": {
+              "in_list": true
+            },
             "steps": [
               {
                 "op": "rewrite_list",
@@ -97,9 +114,28 @@
                 "format": "inline",
                 "error": "build-storage-operation-registry.ts has no `const modules: Record<string, unknown>[] = [...]` list"
               },
-              { "op": "add_imports", "line": "import * as <%= it.names.thingsCamel %> from '../../data/<%= it.names.folder %>';" }
+              {
+                "op": "add_imports",
+                "line": "import * as <%= it.names.thingsCamel %> from '../../data/<%= it.names.folder %>';"
+              }
             ]
           }
+        }
+      ]
+    },
+    "dispatcher": {
+      "files": [
+        {
+          "id": "exposed-endpoints",
+          "path": "migrations/<%= String(it.migrations.next).padStart(3, '0') %>_dispatcher_exposed_endpoints_<%= it.dispatcher.session_slug %>.sql",
+          "each": "once",
+          "mode": "write",
+          "template": "dispatcher/exposed-endpoints.sql.eta",
+          "convention_keys": [
+            "dispatcher.catalog.storage_owned",
+            "dispatcher.catalog.seed_storage_paths",
+            "dispatcher.catalog.never_expose_admin"
+          ]
         }
       ]
     }

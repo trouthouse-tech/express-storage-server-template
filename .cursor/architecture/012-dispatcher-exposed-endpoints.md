@@ -11,7 +11,7 @@ The main gateway forwards `/{projectId}/...` to the project's dispatcher, which 
 ## Decision
 
 - Each project lists at least its storage paths: `GET /api/storage/health`, `GET /api/storage/meta`, `POST /api/storage/v1/invoke` (service `{project}-storage`). API express paths are added when the web needs them through the gateway.
-- Rows are project-specific, so the template ships the table only. Add rows in a project migration (`ON CONFLICT (id) DO NOTHING`) or through the admin routes:
+- Rows are project-specific, so the template ships the table only. Code Control's **Dispatcher** tab generates the seed migration (`migrations/NNN_dispatcher_exposed_endpoints_{project}.sql`, `ON CONFLICT DO NOTHING`) with the storage trio for service `{project}-storage`. Add more rows in a later migration or through the admin routes:
   `GET|POST /api/storage/dispatcher-exposed-endpoints`, `PATCH|DELETE /api/storage/dispatcher-exposed-endpoints/:id` (storage secret required).
 
 ```sql
@@ -21,3 +21,5 @@ INSERT INTO dispatcher_exposed_endpoints (id, project_id, service_id, method, pa
   ('{project}-storage-v1-invoke', '{project}', '{project}-storage', 'POST', '/api/storage/v1/invoke', 'Storage invoke', true, true, 30)
 ON CONFLICT (id) DO NOTHING;
 ```
+
+- Paths must sit under the owning service's `pathPrefix` (`/api/storage` for storage, `/api/data` for the API); the project dispatcher drops rows that do not (express template ADR 012).
