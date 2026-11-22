@@ -6,8 +6,9 @@ The **template agent** in Code Control edits this folder (plus the scaffold and 
 
 ## Layout
 
-- `manifest.json` lists every generated file, per kind (`model`, `crud`).
-- `model/`, `crud/`: [Eta](https://eta.js.org) templates (`.eta`).
+- `manifest.json` lists every generated file, per kind (`model`, `crud`, `dispatcher`).
+- `model/`, `crud/`, `dispatcher/`: [Eta](https://eta.js.org) templates (`.eta`).
+- `dispatcher` writes one migration seeding `dispatcher_exposed_endpoints` from `it.dispatcher.endpoints` (ADR 012), numbered after the repo's existing migrations.
 - `crud/support/**.raw`: files copied as-is when the project doesn't have them yet (no Eta).
 
 ## Manifest entries
@@ -27,6 +28,7 @@ The **template agent** in Code Control edits this folder (plus the scaffold and 
 ## Template data (`it`)
 
 - `it.role`, `it.kind`, `it.version`, `it.vocabulary`, `it.standard_columns` (sorted), `it.tables`, `it.migrations.next`
+- `it.dispatcher` (kind `dispatcher` only): `project_id`, `name`, `session_slug`, `service_ids`, `endpoints` (`id`, `service_id`, `method`, `path`, `summary`, `requires_body`, `sort_order`) and the rest of the dispatcher plan
 - per table / operation: `it.crud`, `it.table`, `it.names` (`table`, `entity`, `folder`, `Entity`, `Things`, `entityCamel`, `thingsCamel`), `it.columns`, `it.index`, `it.op` (`kind`, `name`, `file`, `column`)
 - `it.h`: string helpers (`pascal`, `kebab`, `camel`, `upperFirst`, `camelToKebab`, `indexName`, `sqlQuote`, `tsQuote`, `json`, `oneLine`, `docText`, `reEscape`)
 
